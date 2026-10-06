@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10251c">
+  <title>棋牌管理端</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, "Microsoft YaHei", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #101a15; color: #f1f4ee; }
+    header { padding: 18px; background: #14251b; }
+    .header-content { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .header-meta { flex: 0 0 auto; color: #b7cabc; font-size: 11px; line-height: 1.5; text-align: right; }
+    main { width: min(800px, 100%); margin: auto; padding: 20px; }
+    .panel { padding: 20px; margin-bottom: 14px; border: 1px solid #3a5544; border-radius: 12px; background: #1a2b21; }
+    .muted { color: #b7cabc; line-height: 1.6; }
+    .games { display: flex; flex-wrap: wrap; gap: 12px; }
+    a { display: inline-flex; min-height: 44px; align-items: center; padding: 10px 16px; border-radius: 8px; background: #247b4a; color: white; font-weight: 700; text-decoration: none; }
+    .back { background: #425e4b; }
+  </style>
+</head>
+<body>
+  <header><div class="header-content"><h1>棋牌管理端</h1><div class="header-meta">编写者：Ljhforout@outlook.com<br>隧道服务提供者：Cloudflare</div></div></header>
+  <main>
+    <section class="panel">
+      <p class="muted">登录后在同一个管理台创建、设置和查看斗地主及湖南麻将房间；创建每桌时可单独选择游戏类型。管理端同一时间只允许一台设备在线。</p>
+      <div class="games">
+        <a href="/admin">打开统一管理台</a>
+      </div>
+    </section>
+    <a class="back" href="/">返回棋牌大厅</a>
+  </main>
+</body>
+</html>

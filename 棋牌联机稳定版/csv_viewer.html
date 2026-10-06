@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10251c">
+  <title>棋牌 · CSV 记录查看器</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, "Microsoft YaHei", sans-serif; }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; background: #101a15; color: #f1f4ee; }
+    header { padding: 16px 22px; border-bottom: 1px solid #354b3e; background: #14251b; }
+    .header-content { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .header-meta { flex: 0 0 auto; color: #b7cabc; font-size: 11px; line-height: 1.5; text-align: right; }
+    h1 { margin: 0; font-size: 21px; }
+    main { max-width: 1300px; margin: auto; padding: 18px; }
+    .panel { background: #1a2b21; border: 1px solid #3a5544; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+    .row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+    input, select { min-height: 42px; border: 1px solid #64836f; border-radius: 7px; padding: 8px 11px; background: #0c1711; color: white; font-size: 15px; }
+    #query { flex: 1 1 240px; }
+    button, .link { min-height: 42px; padding: 8px 14px; border: 0; border-radius: 7px; background: #247b4a; color: white; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
+    button.secondary, .link.secondary { background: #425e4b; }
+    button:disabled { opacity: .45; cursor: default; }
+    .muted { color: #b7cabc; font-size: 13px; }
+    .error { color: #ffad9d; min-height: 20px; margin-top: 8px; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; min-width: 1010px; border-collapse: collapse; }
+    th, td { padding: 10px 8px; border-bottom: 1px solid #354b3e; text-align: left; vertical-align: top; }
+    th { color: #a9c7b2; font-size: 13px; }
+    td { font-size: 14px; }
+    .details { min-width: 230px; max-width: 420px; }
+    .game-badge { display: inline-block; min-width: 68px; padding: 3px 7px; border-radius: 99px; background: #365842; text-align: center; font-size: 12px; }
+    .game-badge.mahjong { background: #665236; }
+    details summary { color: #c5edce; cursor: pointer; }
+    .snapshot { margin-top: 9px; padding: 10px; background: #0f1e15; border-radius: 7px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .hand { color: #f1f4ee; line-height: 1.8; }
+    .pager { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 14px; }
+    .empty { padding: 18px 4px; }
+    .delete-button { min-height: 34px; padding: 6px 10px; background: #a63b36; font-size: 13px; }
+    #delete-room { background: #a63b36; }
+    .room-selection { display: grid; gap: 7px; margin-top: 10px; }
+    .room-option { display: flex; align-items: center; gap: 9px; padding: 9px 10px; background: #0f1e15; border-radius: 7px; overflow-wrap: anywhere; }
+    .room-option input { flex: 0 0 auto; width: 18px; height: 18px; min-height: auto; accent-color: #43a56a; }
+    .room-option.disabled { opacity: .65; }
+    @media (max-width: 600px) { main { padding: 12px; } header { padding: 14px; } .panel { padding: 12px; } }
+  </style>
+</head>
+<body>
+  <header><div class="header-content"><h1>♠ 棋牌 · CSV 记录查看器</h1><div class="header-meta">编写者：Ljhforout@outlook.com<br>隧道服务提供者：Cloudflare</div></div></header>
+  <main>
+    <section class="panel">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <div>查看接收端保存的牌局操作记录与状态快照</div>
+          <div class="muted">可查看 landlord_games.csv 和 hunan_mahjong_games.csv；玩家重连凭据不会在查看器中显示。</div>
+        </div>
+        <a class="link secondary" href="/admin">返回管理端</a>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="row">
+        <select id="game-filter" aria-label="筛选游戏">
+          <option value="">两种游戏</option>
+          <option value="landlord">斗地主</option>
+          <option value="mahjong">湖南麻将</option>
+        </select>
+        <select id="room-filter" aria-label="筛选房间">
+          <option value="">所有房间</option>
+        </select>
+        <button id="export-room" type="button" hidden>一键导出本局数据（Excel CSV）</button>
+        <button id="delete-room" type="button" hidden>删除该房间全部数据</button>
+        <input id="query" type="search" placeholder="搜索房间、玩家、操作、牌面或状态">
+        <button id="search">搜索</button>
+      </div>
+      <div id="room-summary" class="muted" style="margin-top:10px"></div>
+      <div class="muted" style="margin-top:6px">查看器支持两种游戏的操作和状态快照；斗地主可单局导出及删除已关闭房间记录，麻将目前支持查看。</div>
+      <div class="row" style="margin-top:10px">
+        <button id="select-closed-rooms" class="secondary" type="button">全选可删除的斗地主房间</button>
+        <button id="delete-selected-rooms" class="delete-button" type="button" disabled>批量删除所选房间</button>
+        <span id="selection-count" class="muted">未选择房间</span>
+      </div>
+      <div id="room-selection" class="room-selection" aria-label="选择要批量删除的房间"></div>
+      <div id="status" class="muted" style="margin-top:10px"></div>
+      <div id="error" class="error" role="status"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>时间</th><th>游戏</th><th>房间</th><th>序号</th><th>操作</th><th>操作人</th><th>详情 / 当时状态</th><th>删除</th>
+          </tr></thead>
+          <tbody id="events"></tbody>
+        </table>
+        <div id="empty" class="muted empty" hidden>没有匹配的 CSV 记录。</div>
+      </div>
+      <div class="pager">
+        <button id="previous" class="secondary">上一页</button>
+        <span id="page-info" class="muted"></span>
+        <button id="next" class="secondary">下一页</button>
+      </div>
+    </section>
+  </main>
+  <script>
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const token = sessionStorage.getItem("landlord-admin-token") || "";
+    const pageSize = 50;
+    let page = 1;
+    let total = 0;
+    let notice = "";
+    let roomsById = new Map();
+    const selectedRoomIds = new Set();
+
+    function addText(parent, tag, value, className = "") {
+      const node = document.createElement(tag);
+      node.textContent = value;
+      if (className) node.className = className;
+      parent.append(node);
+      return node;
+    }
+
+    function phaseName(phase) {
+      return ({lobby: "等待玩家", bidding: "叫地主", playing: "进行中",
+        finished: "已结束", closed: "已关闭"})[phase] || phase || "未知";
+    }
+
+    function displayDetails(details) {
+      if (!details || typeof details !== "object") return "无附加详情";
+      const values = Object.entries(details).map(([key, value]) => {
+        const label = ({
+          title: "房间名", human_count: "真人玩家数", seat: "座位",
+          ready: "准备状态", deal_no: "发牌轮次", first_bidder: "首位叫地主",
+          bid_candidate: "当前叫地主者", landlord: "地主座位",
+          cards: "出牌", reason: "原因", action: "操作"
+        })[key] || key;
+        const readable = Array.isArray(value) ? value.join(" ") :
+          typeof value === "object" && value !== null ? JSON.stringify(value) :
+          String(value);
+        return `${label}：${readable}`;
+      });
+      return values.join("\n") || "无附加详情";
+    }
+
+    function displaySnapshot(snapshot, error) {
+      if (error) return error;
+      if (!snapshot) return "没有可用的状态快照";
+      if (snapshot.game_type === "mahjong") {
+        const lines = [
+          `房间：${snapshot.title}（第 ${snapshot.round_no || 1} 局 · ${phaseName(snapshot.phase)}）`,
+          `提示：${snapshot.message || "无"}`,
+          `庄家：${snapshot.dealer == null ? "未确定" : snapshot.dealer + 1}`,
+          `当前座位：${snapshot.current == null ? "无" : snapshot.current + 1}`,
+          `牌墙剩余：${snapshot.wall_count} 张`
+        ];
+        for (const player of snapshot.players) {
+          const role = player.human ? "真人" : "AI";
+          lines.push(`座位 ${player.seat + 1} · ${player.name}（${role}）· ${player.card_count} 张`);
+          lines.push(`手牌：${player.hand.join(" ") || "无"}`);
+          lines.push(`碰杠：${player.melds.flat().join(" ") || "无"}`);
+          lines.push(`弃牌：${player.discards.join(" ") || "无"}`);
+        }
+        return lines.join("\n");
+      }
+      const lines = [
+        `房间：${snapshot.title}（第 ${snapshot.round_no || 1} 局 · ${phaseName(snapshot.phase)}）`,
+        `提示：${snapshot.message || "无"}`,
+        `地主座位：${snapshot.landlord == null ? "未产生" : snapshot.landlord + 1}`,
+        `当前回合：${snapshot.current_turn == null ? "无" : snapshot.current_turn + 1}`
+      ];
+      for (const player of snapshot.players) {
+        const role = player.human ? "真人" : "AI";
+        const hand = player.hand.length ? player.hand.join(" ") : "无";
+        lines.push(`座位 ${player.seat + 1} · ${player.name}（${role}）· ${player.card_count} 张`);
+        lines.push(`手牌：${hand}`);
+      }
+      return lines.join("\n");
+    }
+
+    function render(events) {
+      const body = $("events");
+      body.replaceChildren();
+      $("empty").hidden = events.length !== 0;
+      for (const event of events) {
+        const row = document.createElement("tr");
+        addText(row, "td", event.timestamp
+          ? new Date(event.timestamp).toLocaleString() : "时间未知");
+        addText(row, "td",
+          event.game_type === "mahjong" ? "湖南麻将" : "斗地主",
+          `game-badge${event.game_type === "mahjong" ? " mahjong" : ""}`);
+        addText(row, "td", `${event.snapshot?.title || "牌局"}\n${event.game_id}`);
+        addText(row, "td", event.event_no || "—");
+        addText(row, "td", event.action_label || event.action);
+        addText(row, "td", event.player_name || "系统");
+        const cell = document.createElement("td");
+        cell.className = "details";
+        const details = document.createElement("details");
+        addText(details, "summary", event.description);
+        addText(details, "div", displayDetails(event.details), "snapshot");
+        addText(details, "div",
+          displaySnapshot(event.snapshot, event.snapshot_error), "snapshot");
+        cell.append(details);
+        row.append(cell);
+        const deleteCell = document.createElement("td");
+        const deleteButton = addText(deleteCell, "button", "删除", "delete-button");
+        deleteButton.type = "button";
+        deleteButton.hidden = event.game_type === "mahjong";
+        deleteButton.addEventListener("click", () => deleteEvent(event));
+        row.append(deleteCell);
+        body.append(row);
+      }
+      const pages = Math.max(1, Math.ceil(total / pageSize));
+      $("page-info").textContent = `第 ${page} / ${pages} 页 · 共 ${total} 条记录`;
+      $("previous").disabled = page <= 1;
+      $("next").disabled = page >= pages;
+      $("status").textContent = notice ||
+        "操作记录按最新时间优先显示。展开详情可查看记录字段及该时刻的牌局状态和所有玩家手牌。";
+      updateRoomControls();
+    }
+
+    function updateRoomControls() {
+      const roomId = $("room-filter").value;
+      const room = roomsById.get(roomId);
+      const exportButton = $("export-room");
+      exportButton.hidden = !room || room.game_type === "mahjong";
+      exportButton.disabled = !room || room.game_type === "mahjong";
+      exportButton.title = room
+        ? room.game_type === "mahjong"
+          ? "麻将记录目前可查看，单局导出暂不可用"
+          : `导出「${room.title}」的完整牌局记录`
+        : "请先选择一个房间";
+      const button = $("delete-room");
+      button.hidden = !room || room.game_type === "mahjong";
+      button.disabled = !room || room.phase !== "closed" || room.game_type === "mahjong";
+      $("room-summary").textContent = !room
+        ? "选择房间后查看该局的全部操作记录；只能删除已关闭房间的整局数据。"
+        : `当前房间：${room.title}（${room.game_id}） · ${phaseName(room.phase)} · ${room.event_count} 条可查看记录` +
+          (room.game_type === "mahjong"
+            ? " · 湖南麻将记录"
+            : room.phase === "closed" ? " · 可删除该房间全部数据" : " · 进行中的房间不可删除");
+      button.title = room?.game_type === "mahjong"
+        ? "麻将数据删除暂不可用"
+        : room && room.phase !== "closed"
+          ? "请先在管理端关闭该房间"
+          : "删除该房间的全部 CSV 记录";
+      const deleteSelected = $("delete-selected-rooms");
+      deleteSelected.disabled = selectedRoomIds.size === 0;
+      $("selection-count").textContent = selectedRoomIds.size
+        ? `已选择 ${selectedRoomIds.size} 个已关闭房间`
+        : "未选择房间";
+      renderRoomSelection();
+    }
+
+    async function exportRoom() {
+      const roomId = $("room-filter").value;
+      const room = roomsById.get(roomId);
+      if (!room) return;
+      const button = $("export-room");
+      button.disabled = true;
+      $("error").textContent = "";
+      try {
+        const response = await fetch(
+          `/api/admin/csv/${encodeURIComponent(roomId)}/export`,
+          {headers: {"X-Admin-Token": token}}
+        );
+        if (!response.ok) {
+          const result = await response.json();
+          throw new Error(result.error || `导出失败 (${response.status})`);
+        }
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `landlord-game-${roomId}.csv`;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        notice = `已导出「${room.title}」的完整牌局数据。`;
+        $("status").textContent = notice;
+      } catch (error) {
+        $("error").textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    function renderRoomSelection() {
+      const list = $("room-selection");
+      list.replaceChildren();
+      const rooms = [...roomsById.values()].filter(room =>
+        room.game_type === "landlord"
+      );
+      $("select-closed-rooms").disabled =
+        !rooms.some(room => room.phase === "closed");
+      const closedRooms = rooms.filter(room => room.phase === "closed");
+      const allClosedSelected = closedRooms.length > 0
+        && closedRooms.every(room => selectedRoomIds.has(room.game_id));
+      $("select-closed-rooms").textContent =
+        allClosedSelected ? "取消选择已关闭房间" : "全选已关闭房间";
+      for (const [index, room] of rooms.entries()) {
+        const label = document.createElement("label");
+        label.className = `room-option${room.phase === "closed" ? "" : " disabled"}`;
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = selectedRoomIds.has(room.game_id);
+        checkbox.disabled = room.phase !== "closed";
+        checkbox.id = `select-room-${index}`;
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked) selectedRoomIds.add(room.game_id);
+          else selectedRoomIds.delete(room.game_id);
+          updateRoomControls();
+        });
+        label.htmlFor = checkbox.id;
+        label.append(checkbox);
+        const description = document.createElement("span");
+        description.textContent =
+          `斗地主 · ${room.title} · ${room.game_id} · ${phaseName(room.phase)} · ${room.event_count} 条记录`;
+        label.append(description);
+        list.append(label);
+      }
+    }
+
+    async function deleteEvent(event) {
+      const confirmMessage = [
+        `确定删除房间 ${event.game_id} 的第 ${event.event_no} 条记录吗？`,
+        `操作：${event.action_label || event.action} · ${event.player_name || "系统"}`,
+        "该操作会改写 CSV，且无法撤销。"
+      ].join("\n");
+      if (!confirm(confirmMessage)) return;
+      $("error").textContent = "";
+      try {
+        const response = await fetch(
+          `/api/admin/csv/${encodeURIComponent(event.game_id)}/${encodeURIComponent(event.event_no)}`,
+          {method: "DELETE", headers: {"X-Admin-Token": token}}
+        );
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || `请求失败 (${response.status})`);
+        notice = result.checkpointed
+          ? "记录已删除；已保留隐藏的牌局恢复检查点，房间状态不会回退。"
+          : "记录已删除，其他牌局状态不受影响。";
+        await load();
+      } catch (error) {
+        $("error").textContent = error.message;
+      }
+    }
+
+    async function deleteRoom() {
+      const room = roomsById.get($("room-filter").value);
+      if (!room || room.phase !== "closed") return;
+      const message = [
+        `确定永久删除房间「${room.title}」（${room.game_id}）的全部 CSV 数据吗？`,
+        `这会删除约 ${room.event_count} 条可查看操作记录以及隐藏的恢复检查点。`,
+        "该房间必须已关闭；删除后无法恢复。"
+      ].join("\n");
+      if (!confirm(message)) return;
+      $("error").textContent = "";
+      try {
+        const response = await fetch(
+          `/api/admin/csv/rooms/${encodeURIComponent(room.game_id)}`,
+          {method: "DELETE", headers: {"X-Admin-Token": token}}
+        );
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || `请求失败 (${response.status})`);
+        $("room-filter").value = "";
+        page = 1;
+        notice = `已删除房间 ${result.game_id} 的全部 ${result.deleted_rows} 条 CSV 记录。`;
+        await load();
+      } catch (error) {
+        $("error").textContent = error.message;
+      }
+    }
+
+    async function deleteSelectedRooms() {
+      const selectedRooms = [...selectedRoomIds]
+        .map(roomId => roomsById.get(roomId))
+        .filter(room => room && room.phase === "closed");
+      if (!selectedRooms.length) return;
+      const roomList = selectedRooms
+        .map(room => `• ${room.title}（${room.game_id}，${room.event_count} 条记录）`)
+        .join("\n");
+      if (!confirm([
+        `确定永久删除以下 ${selectedRooms.length} 个已关闭房间的全部数据吗？`,
+        roomList,
+        "此操作无法撤销。若所选房间状态有变化，将全部取消删除。"
+      ].join("\n"))) return;
+
+      $("error").textContent = "";
+      try {
+        const response = await fetch("/api/admin/csv/rooms", {
+          method: "DELETE",
+          headers: {"X-Admin-Token": token, "Content-Type": "application/json"},
+          body: JSON.stringify({game_ids: selectedRooms.map(room => room.game_id)})
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || `请求失败 (${response.status})`);
+        selectedRoomIds.clear();
+        if (result.game_ids.includes($("room-filter").value)) {
+          $("room-filter").value = "";
+          page = 1;
+        }
+        notice = `已批量删除 ${result.game_ids.length} 个房间，共 ${result.deleted_rows} 条 CSV 数据。`;
+        await load();
+      } catch (error) {
+        $("error").textContent = error.message;
+      }
+    }
+
+    async function load() {
+      if (!token) {
+        $("error").textContent = "请先在管理端登录，然后从管理端打开此查看器。";
+        $("status").textContent = "";
+        return;
+      }
+      $("error").textContent = "";
+      const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+        game_id: $("room-filter").value,
+        game_type: $("game-filter").value,
+        q: $("query").value.trim()
+      });
+      try {
+        const response = await fetch(`/api/admin/csv?${params}`, {
+          headers: {"X-Admin-Token": token}
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || `请求失败 (${response.status})`);
+        total = result.total;
+        page = Math.min(page, Math.max(1, Math.ceil(total / pageSize)));
+        const roomFilter = $("room-filter");
+        const currentRoom = roomFilter.value;
+        roomFilter.replaceChildren();
+        const allRooms = document.createElement("option");
+        allRooms.value = "";
+        allRooms.textContent = "所有房间";
+        roomFilter.append(allRooms);
+        roomsById = new Map(result.rooms.map(room => [room.game_id, room]));
+        for (const selectedRoomId of selectedRoomIds) {
+          if (!roomsById.has(selectedRoomId)
+              || roomsById.get(selectedRoomId).phase !== "closed") {
+            selectedRoomIds.delete(selectedRoomId);
+          }
+        }
+        for (const room of result.rooms) {
+          const option = document.createElement("option");
+          option.value = room.game_id;
+          option.textContent = `${room.game_type === "mahjong" ? "湖南麻将" : "斗地主"} · ${room.title} · ${room.game_id} · ${phaseName(room.phase)} · ${room.event_count} 条`;
+          roomFilter.append(option);
+        }
+        roomFilter.value = roomsById.has(currentRoom) ? currentRoom : "";
+        render(result.events);
+      } catch (error) {
+        $("error").textContent = error.message;
+      }
+    }
+
+    $("search").addEventListener("click", () => { page = 1; notice = ""; load(); });
+    $("query").addEventListener("keydown", event => {
+      if (event.key === "Enter") { page = 1; notice = ""; load(); }
+    });
+    $("room-filter").addEventListener("change", () => { page = 1; notice = ""; load(); });
+    $("game-filter").addEventListener("change", () => {
+      $("room-filter").value = "";
+      page = 1;
+      notice = "";
+      load();
+    });
+    $("export-room").addEventListener("click", exportRoom);
+    $("delete-room").addEventListener("click", deleteRoom);
+    $("select-closed-rooms").addEventListener("click", () => {
+      const closedRooms = [...roomsById.values()]
+        .filter(room => room.phase === "closed");
+      const allSelected = closedRooms.length > 0
+        && closedRooms.every(room => selectedRoomIds.has(room.game_id));
+      if (allSelected) {
+        closedRooms.forEach(room => selectedRoomIds.delete(room.game_id));
+      } else {
+        closedRooms.forEach(room => selectedRoomIds.add(room.game_id));
+      }
+      updateRoomControls();
+    });
+    $("delete-selected-rooms").addEventListener("click", deleteSelectedRooms);
+    $("previous").addEventListener("click", () => {
+      if (page > 1) { page -= 1; load(); }
+    });
+    $("next").addEventListener("click", () => {
+      if (page * pageSize < total) { page += 1; load(); }
+    });
+    load();
+  </script>
+</body>
+</html>

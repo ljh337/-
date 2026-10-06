@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10251c">
+  <title>棋牌大厅 · 隧道联机</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, "Microsoft YaHei", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #101a15; color: #f1f4ee; }
+    header { padding: 20px; background: #14251b; border-bottom: 1px solid #354b3e; }
+    .header-content { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .header-brand { text-align: left; }
+    .header-meta { flex: 0 0 auto; color: #b7cabc; font-size: 11px; line-height: 1.5; text-align: right; }
+    h1 { margin: 0; }
+    main { width: min(760px, 100%); margin: auto; padding: 22px; }
+    .panel { padding: 20px; border: 1px solid #3a5544; border-radius: 14px; background: #1a2b21; }
+    .muted { color: #c5d4c8; line-height: 1.6; }
+    form { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+    label { width: 100%; font-weight: 700; }
+    input { flex: 1 1 220px; min-width: 0; min-height: 48px; padding: 10px 12px; border: 1px solid #64836f; border-radius: 8px; background: #0c1711; color: white; font-size: 18px; text-transform: uppercase; }
+    button, .admin { display: inline-flex; min-height: 48px; align-items: center; justify-content: center; padding: 10px 18px; border: 0; border-radius: 8px; background: #247b4a; color: white; font-size: 16px; font-weight: 700; text-decoration: none; cursor: pointer; }
+    button:disabled { opacity: .65; cursor: wait; }
+    .error { min-height: 24px; margin-top: 10px; color: #ffad9d; }
+    .games { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 18px; }
+    .game { padding: 14px; border-radius: 10px; background: #0f1e15; }
+    h2 { margin: 0 0 6px; color: #ffdf77; font-size: 18px; }
+    .game p { margin: 0; color: #b7cabc; line-height: 1.55; font-size: 14px; }
+    .actions { margin-top: 18px; text-align: center; }
+    .admin { background: #425e4b; }
+    footer { margin-top: 16px; color: #a9c7b2; font-size: 13px; text-align: center; }
+    @media (max-width: 520px) { main { padding: 14px; } .panel { padding: 16px; } form button { width: 100%; } }
+  </style>
+</head>
+<body>
+  <header><div class="header-content"><div class="header-brand"><h1>♠ 棋牌大厅</h1><div>Cloudflare Tunnel 多人联机</div></div><div class="header-meta">编写者：Ljhforout@outlook.com<br>隧道服务提供者：Cloudflare</div></div></header>
+  <main>
+    <section class="panel">
+      <h2>进入房间</h2>
+      <p class="muted">输入电脑管理端提供的房间号，系统会自动识别斗地主或湖南麻将，并打开对应的牌桌。</p>
+      <form id="join-form">
+        <label for="room">房间号</label>
+        <input id="room" name="room" maxlength="7" autocomplete="off" autocapitalize="characters" required placeholder="输入房间号">
+        <button id="join" type="submit">进入牌桌</button>
+      </form>
+      <div id="error" class="error" role="status" aria-live="polite"></div>
+    </section>
+    <section class="games" aria-label="支持的游戏">
+      <article class="game">
+        <h2>斗地主</h2>
+        <p>每桌 3 个座位，可由真人与 AI 混合对局。</p>
+      </article>
+      <article class="game">
+        <h2>湖南麻将</h2>
+        <p>每桌 4 个座位，可选择真人数量并由 AI 补足。</p>
+      </article>
+    </section>
+    <div class="actions"><a class="admin" href="/admin">电脑管理端</a></div>
+    <footer>使用手机浏览器即可加入；牌局由电脑接收端托管。</footer>
+  </main>
+  <script>
+    "use strict";
+    const form = document.getElementById("join-form");
+    const roomInput = document.getElementById("room");
+    const joinButton = document.getElementById("join");
+    const error = document.getElementById("error");
+
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      const room = roomInput.value.trim().toUpperCase();
+      if (!room) return;
+      error.textContent = "";
+      joinButton.disabled = true;
+      try {
+        const response = await fetch(`/api/rooms/${encodeURIComponent(room)}`);
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "无法识别该房间号");
+        if (result.game_type !== "landlord" && result.game_type !== "mahjong") {
+          throw new Error("该房间对应的游戏类型无效");
+        }
+        location.href = `/?game=${encodeURIComponent(result.game_type)}&room=${encodeURIComponent(room)}`;
+      } catch (requestError) {
+        error.textContent = requestError.message || "连接接收端失败，请检查隧道连接后重试。";
+        joinButton.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

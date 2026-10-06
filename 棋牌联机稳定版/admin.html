@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10251c">
+  <title>♠ 棋牌游戏 · 服务器接收管理端</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, "Microsoft YaHei", sans-serif; }
+    * { box-sizing: border-box; }
+    .hidden, [hidden] { display: none !important; }
+    body { margin: 0; background: #101a15; color: #f1f4ee; }
+    header { padding: 16px 22px; border-bottom: 1px solid #354b3e; background: #14251b; }
+    .header-content { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .header-meta { flex: 0 0 auto; color: #b7cabc; font-size: 11px; line-height: 1.5; text-align: right; }
+    h1 { margin: 0; font-size: 21px; }
+    main { max-width: 1260px; margin: auto; padding: 18px; }
+    .panel { background: #1a2b21; border: 1px solid #3a5544; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+    .row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+    input { min-height: 42px; border: 1px solid #64836f; border-radius: 7px; padding: 8px 11px; background: #0c1711; color: white; font-size: 15px; }
+    #admin-token { width: min(420px, 100%); }
+    #game-title { width: min(300px, 100%); }
+    button { min-height: 42px; padding: 8px 14px; border: 0; border-radius: 7px; background: #247b4a; color: white; font-weight: 700; cursor: pointer; }
+    button.secondary { background: #425e4b; }
+    button.danger { background: #a63b36; }
+    button.logout { flex: 1 1 100%; min-height: 58px; margin-left: 0; font-size: 20px; }
+    .muted { color: #b7cabc; font-size: 13px; }
+    .error { color: #ffad9d; min-height: 20px; margin-top: 8px; }
+    .connection-status { color: #9fe3b4; min-height: 20px; margin-top: 8px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+    .game { cursor: pointer; border-left: 4px solid #658270; }
+    .game.active { border-left-color: #ffcf61; }
+    .game h3 { margin: 0 0 8px; }
+    .badge { display: inline-block; border-radius: 99px; padding: 3px 9px; background: #365842; font-size: 12px; }
+    .players { margin: 10px 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .player { background: #0f1e15; border-radius: 6px; padding: 7px; font-size: 12px; overflow-wrap: anywhere; }
+    .events { margin: 10px 0 0; padding-left: 22px; max-height: 390px; overflow: auto; }
+    .events li { padding: 4px 0; color: #e1eadf; font-size: 13px; }
+    .invite { overflow-wrap: anywhere; color: #c5edce; font-size: 13px; }
+    .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 9px; margin: 12px 0; }
+    .detail-item { background: #0f1e15; padding: 10px; border-radius: 8px; overflow-wrap: anywhere; }
+    .detail-item strong { display: block; color: #a9c7b2; font-size: 12px; margin-bottom: 5px; }
+    .hands-grid { display: grid; gap: 9px; margin: 12px 0; }
+    .hand-detail { padding: 10px; background: #0f1e15; border-radius: 8px; }
+    .hand-detail strong { display: block; color: #a9c7b2; font-size: 13px; margin-bottom: 7px; }
+    .hand-cards { color: #f1f4ee; line-height: 1.8; overflow-wrap: anywhere; white-space: pre-line; }
+    .event-time { color: #a9c7b2; font-size: 12px; }
+    .game-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+    .button-link { display: inline-flex; min-height: 42px; align-items: center; padding: 8px 14px; border-radius: 7px; background: #425e4b; color: white; font-weight: 700; text-decoration: none; }
+    @media (max-width: 600px) { main { padding: 12px; } header { padding: 14px; } .panel { padding: 12px; } }
+  </style>
+</head>
+<body>
+  <header><div class="header-content"><h1>♠ 棋牌游戏 · 服务器接收管理端</h1><div class="header-meta">编写者：Ljhforout@outlook.com<br>隧道服务提供者：Cloudflare</div></div></header>
+  <main>
+    <section class="panel">
+      <div class="muted">管理口令只在接收端启动窗口显示；玩家端无需口令。</div>
+      <div class="row" style="margin-top:10px">
+        <div id="auth-controls" class="row">
+          <input id="admin-token" type="password" autocomplete="current-password" placeholder="输入接收端管理口令">
+          <button id="unlock">连接管理台</button>
+        </div>
+        <button id="logout" class="danger logout" type="button" hidden>下线</button>
+      </div>
+      <div id="error" class="error" role="status"></div>
+      <div id="connection-status" class="connection-status" role="status"></div>
+    </section>
+    <section id="dashboard" class="hidden">
+      <section class="panel">
+        <h2 style="margin-top:0">创建新牌局</h2>
+        <div class="row">
+          <input id="game-title" maxlength="40" placeholder="牌桌名称（可留空）">
+          <label for="game-type" class="muted" style="margin:0">游戏</label>
+          <select id="game-type" style="min-height:42px;padding:8px 10px;border-radius:7px;background:#0c1711;color:white">
+            <option value="landlord">斗地主</option>
+            <option value="mahjong">湖南麻将</option>
+          </select>
+          <label for="human-count" class="muted" style="margin:0">真人玩家</label>
+          <select id="human-count" style="min-height:42px;padding:8px 10px;border-radius:7px;background:#0c1711;color:white">
+            <option value="1">1 人真人 + 2 个 AI</option>
+            <option value="2">2 人真人 + 1 个 AI</option>
+            <option value="3" selected>3 人真人</option>
+          </select>
+          <button id="create">创建牌局</button>
+        </div>
+        <p id="game-help" class="muted">斗地主每桌共 3 个座位；剩余座位由 AI 自动补齐。创建后可复制对应游戏的邀请链接或分享隧道地址和房间号。</p>
+        <div id="invite" class="invite"></div>
+      </section>
+      <section class="panel">
+        <div class="row" style="justify-content:space-between">
+          <h2 style="margin:0">全部牌局</h2>
+          <div class="row">
+            <a class="button-link" href="/csv-viewer">查看 CSV 记录</a>
+            <button id="refresh" class="secondary">立即刷新</button>
+          </div>
+        </div>
+        <p class="muted">自动刷新 · 只显示未关闭房间；关闭房间会从列表隐藏，但牌局及操作记录仍保存在 CSV 中。</p>
+        <div id="games" class="grid"></div>
+        <div id="empty" class="muted hidden">没有未关闭的房间，点击上方创建新牌局。</div>
+      </section>
+      <section id="detail-panel" class="panel hidden">
+        <h2 id="detail-title" style="margin-top:0"></h2>
+        <div id="detail-summary" class="muted"></div>
+        <section id="mahjong-wall-section" class="hidden">
+          <h3>麻将牌墙（从下一张起）</h3>
+          <div id="mahjong-wall" class="hand-detail hand-cards"></div>
+        </section>
+        <h3>所有玩家手牌</h3>
+        <div id="detail-hands" class="hands-grid"></div>
+        <ol id="detail-events" class="events"></ol>
+      </section>
+    </section>
+  </main>
+  <script>
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    let token = sessionStorage.getItem("landlord-admin-token") || "";
+    let selectedGame = "";
+    let games = [];
+    let poll;
+    $("admin-token").value = "";
+
+    function setError(message) { $("error").textContent = message || ""; }
+    function endLocalSession(message) {
+      clearInterval(poll);
+      poll = null;
+      token = "";
+      sessionStorage.removeItem("landlord-admin-token");
+      $("dashboard").classList.add("hidden");
+      $("auth-controls").classList.remove("hidden");
+      $("logout").hidden = true;
+      $("connection-status").textContent = message;
+    }
+    async function api(url, options = {}) {
+      const response = await fetch(url, {
+        ...options,
+        headers: {"X-Admin-Token": token, ...(options.headers || {})}
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        const error = new Error(data.error || `请求失败 (${response.status})`);
+        error.status = response.status;
+        throw error;
+      }
+      return data;
+    }
+
+    function text(parent, tag, value, className = "") {
+      const element = document.createElement(tag);
+      element.textContent = value;
+      if (className) element.className = className;
+      parent.append(element);
+      return element;
+    }
+
+    function renderGames(games) {
+      const root = $("games");
+      const activeGames = games.filter(game => game.phase !== "closed");
+      root.replaceChildren();
+      $("empty").classList.toggle("hidden", activeGames.length !== 0);
+      if (!activeGames.some(game => game.game_id === selectedGame)) {
+        selectedGame = "";
+      }
+      for (const game of activeGames) {
+        const card = document.createElement("article");
+        card.className = `panel game${game.game_id === selectedGame ? " active" : ""}`;
+        card.addEventListener("click", () => {
+          selectedGame = game.game_id;
+          renderGames(activeGames);
+          if (game.game_type === "mahjong") renderMahjongDetail(game);
+          else renderDetail(game);
+        });
+        const title = document.createElement("h3");
+        title.textContent = `${game.title} · ${game.game_id}`;
+        card.append(title);
+        text(card, "span", game.game_type === "mahjong" ? "湖南麻将" : "斗地主", "badge");
+        text(card, "span", phaseName(game.phase), "badge");
+        text(card, "div",
+          `开启于 ${formatDateTime(game.created_at)} · 已使用 ${roomDuration(game)}`,
+          "muted");
+        const players = document.createElement("div");
+        players.className = "players";
+        const seatCount = game.game_type === "mahjong" ? 4 : 3;
+        for (let seat = 0; seat < seatCount; seat++) {
+          const player = game.players.find(item => item.seat === seat);
+          const box = document.createElement("div");
+          box.className = "player";
+          const playerName = player && player.human && !player.joined
+            ? "等待加入" : player ? player.name : "未分配";
+          const playerStatus = !player ? "" : player.human
+            ? (player.joined
+              ? `${player.connected ? "在线" : "离线"} · ${playerPhaseStatus(player, game.phase)}`
+              : "")
+            : playerPhaseStatus(player, game.phase);
+          const countLabel = game.game_type === "mahjong" ? "张手牌" : "张牌";
+          box.textContent = player
+            ? `${seatName(seat)}：${playerName}${playerStatus ? `\n${playerStatus}` : ""} · ${player.card_count} ${countLabel}`
+            : `${seatName(seat)}：未分配`;
+          players.append(box);
+        }
+        card.append(players);
+        text(card, "div", game.message, "muted");
+        if (game.phase !== "closed") {
+          const controls = document.createElement("div");
+          controls.className = "game-actions";
+          const close = text(controls, "button", "关闭房间", "danger");
+          close.type = "button";
+          close.addEventListener("click", (event) => {
+            event.stopPropagation();
+            closeGame(game);
+          });
+          card.append(controls);
+        }
+        root.append(card);
+      }
+      const selected = activeGames.find(game => game.game_id === selectedGame);
+      if (selected) {
+        if (selected.game_type === "mahjong") renderMahjongDetail(selected);
+        else renderDetail(selected);
+      }
+      else $("detail-panel").classList.add("hidden");
+    }
+
+    function phaseName(phase) {
+      return ({lobby: "等待玩家", bidding: "叫地主", playing: "进行中", finished: "已结束", closed: "已关闭"})[phase] || phase;
+    }
+
+    function playerPhaseStatus(player, phase) {
+      if (phase === "lobby") {
+        return player.human
+          ? (player.ready ? "已准备" : "未准备")
+          : "AI 自动准备";
+      }
+      if (phase === "bidding" || phase === "playing") {
+        return player.human ? "对局中" : "AI 自动行动";
+      }
+      return phase === "finished" ? "已结束" : "";
+    }
+
+    function seatName(seat) { return `座位 ${seat + 1}`; }
+
+    function formatDateTime(timestamp) {
+      const date = new Date(timestamp);
+      return Number.isNaN(date.getTime()) ? "时间未知" : date.toLocaleString();
+    }
+
+    function roomDuration(game) {
+      const start = Date.parse(game.created_at);
+      const end = game.phase === "closed"
+        ? Date.parse(game.closed_at || "")
+        : Date.now();
+      if (Number.isNaN(start) || Number.isNaN(end)) return "未知";
+      let seconds = Math.max(0, Math.floor((end - start) / 1000));
+      const days = Math.floor(seconds / 86400);
+      seconds %= 86400;
+      const hours = Math.floor(seconds / 3600);
+      seconds %= 3600;
+      const minutes = Math.floor(seconds / 60);
+      seconds %= 60;
+      if (days) return `${days}天${hours}小时`;
+      if (hours) return `${hours}小时${minutes}分`;
+      if (minutes) return `${minutes}分${seconds}秒`;
+      return `${seconds}秒`;
+    }
+
+    function renderDetail(game) {
+      $("detail-panel").classList.remove("hidden");
+      $("mahjong-wall-section").classList.add("hidden");
+      $("detail-title").textContent = `${game.title} · 房间 ${game.game_id}`;
+      const summary = $("detail-summary");
+      summary.replaceChildren();
+      const info = document.createElement("div");
+      info.className = "detail-grid";
+      const currentText = game.phase === "bidding"
+        ? `等待 ${game.current_player || "玩家"}${game.bid_candidate == null ? " 叫地主" : " 抢地主"}`
+        : game.phase === "playing"
+          ? `轮到 ${game.current_player || "玩家"} 出牌`
+          : game.phase === "finished"
+            ? `${game.winner_name || "玩家"} 已获胜`
+            : game.phase === "closed" ? "房间已关闭" : "等待真人玩家加入并准备";
+      const landlordText = game.landlord == null
+        ? (game.bid_candidate == null ? "尚未产生" : `${game.players[game.bid_candidate]?.name || "玩家"}（叫牌中）`)
+        : game.players[game.landlord]?.name || "未知";
+      const lastPlayText = game.last_play
+        ? `${game.last_play.player_name}：${game.last_play.cards.join(" ")}`
+        : "暂无（新一轮/尚未开始）";
+      for (const [label, value] of [
+        ["房间状态", phaseName(game.phase)],
+        ["当前进度", currentText],
+        ["地主", landlordText],
+        ["桌面上一手", lastPlayText],
+        ["牌局提示", game.message],
+        ["房间打开时间", formatDateTime(game.created_at)],
+        ["房间关闭时间", game.closed_at ? formatDateTime(game.closed_at) : "尚未关闭"],
+        ["房间使用时长", roomDuration(game)]
+      ]) {
+        const item = document.createElement("div");
+        item.className = "detail-item";
+        text(item, "strong", label);
+        text(item, "div", value);
+        info.append(item);
+      }
+      summary.append(info);
+      const hands = $("detail-hands");
+      hands.replaceChildren();
+      for (const player of [...game.players].sort((a, b) => a.seat - b.seat)) {
+        const row = document.createElement("div");
+        row.className = "hand-detail";
+        const identity = player.human
+          ? (player.joined ? player.name : "等待加入")
+          : `${player.name}（AI）`;
+        const role = player.seat === game.landlord ? " · 地主" : "";
+        const playerStatus = playerPhaseStatus(player, game.phase);
+        const readiness = playerStatus ? ` · ${playerStatus}` : "";
+        text(row, "strong",
+          `座位 ${player.seat + 1} · ${identity}${role}${readiness} · ${player.card_count} 张`);
+        text(row, "div",
+          player.hand.length ? player.hand.join("　") : "当前没有手牌",
+          "hand-cards");
+        hands.append(row);
+      }
+      const list = $("detail-events");
+      list.replaceChildren();
+      for (const event of [...game.events].reverse()) {
+        const when = event.timestamp ? new Date(event.timestamp).toLocaleString() : "时间未知";
+        text(list, "li", `${when} · ${event.player_name}：${event.description}`);
+      }
+    }
+
+    function renderMahjongDetail(game) {
+      $("detail-panel").classList.remove("hidden");
+      $("mahjong-wall-section").classList.remove("hidden");
+      $("mahjong-wall").textContent = game.wall?.length
+        ? game.wall.join("　")
+        : "牌墙已空或尚未发牌";
+      $("detail-title").textContent = `${game.title} · 湖南麻将 · 房间 ${game.game_id}`;
+      const summary = $("detail-summary");
+      summary.replaceChildren();
+      const info = document.createElement("div");
+      info.className = "detail-grid";
+      const current = game.phase === "playing"
+        ? `第 ${game.round_no} 局 · 轮到 ${game.players[game.current]?.name || "未知玩家"}`
+        : game.phase === "finished"
+          ? `${game.winner == null ? "流局" : game.players[game.winner]?.name || "玩家"} · 本局结束`
+          : game.phase === "closed" ? "房间已关闭" : "等待真人玩家加入并准备";
+      for (const [label, value] of [
+        ["房间状态", phaseName(game.phase)],
+        ["当前进度", current],
+        ["庄家", game.players[game.dealer]?.name || "尚未确定"],
+        ["牌墙剩余", `${game.wall_count} 张`],
+        ["牌局提示", game.message],
+        ["房间打开时间", formatDateTime(game.created_at)],
+        ["房间关闭时间", game.closed_at ? formatDateTime(game.closed_at) : "尚未关闭"],
+        ["房间使用时长", roomDuration(game)]
+      ]) {
+        const item = document.createElement("div");
+        item.className = "detail-item";
+        text(item, "strong", label);
+        text(item, "div", value);
+        info.append(item);
+      }
+      summary.append(info);
+
+      const hands = $("detail-hands");
+      hands.replaceChildren();
+      for (const player of [...game.players].sort((a, b) => a.seat - b.seat)) {
+        const row = document.createElement("div");
+        row.className = "hand-detail";
+        const identity = player.human
+          ? (player.joined ? player.name : "等待加入")
+          : `${player.name}（AI）`;
+        const status = player.human
+          ? (player.joined
+            ? `${player.connected ? "在线" : "离线"} · ${player.ready ? "已准备" : "未准备"}`
+            : "")
+          : "AI 自动行动";
+        text(row, "strong",
+          `座位 ${player.seat + 1} · ${identity}${status ? ` · ${status}` : ""} · ${player.card_count} 张`);
+        text(row, "div",
+          `手牌：${player.hand.length ? player.hand.join(" ") : "无"}\n碰杠：${player.melds.map(meld => meld.join(" ")).join(" / ") || "无"}\n弃牌：${player.discards.join(" ") || "无"}\n积分：${player.score}`,
+          "hand-cards");
+        hands.append(row);
+      }
+      const actionNames = {
+        game_created: "创建房间", player_joined: "玩家加入",
+        player_connected: "玩家上线", player_disconnected: "玩家离线",
+        ready_changed: "准备状态变更", dealt: "发牌",
+        drawn: "摸牌", discarded: "出牌", claimed: "碰牌",
+        gang: "杠牌", won: "胡牌", draw_game: "流局", passed: "过",
+        rematch_voted: "决定再开一局", rematch_started: "开始新一局",
+        game_closed: "管理员关闭房间"
+      };
+      const list = $("detail-events");
+      list.replaceChildren();
+      for (const event of [...game.events].reverse()) {
+        const when = event.timestamp ? new Date(event.timestamp).toLocaleString() : "时间未知";
+        const details = event.details && Object.keys(event.details).length
+          ? ` · ${Object.entries(event.details).map(([key, value]) =>
+            `${key}：${Array.isArray(value) ? value.join("、") : value}`).join("，")}`
+          : "";
+        text(list, "li",
+          `${when} · ${event.player_name}：${actionNames[event.action] || event.action}${details}`);
+      }
+    }
+
+    async function closeGame(game) {
+      if (!confirm(`确定关闭「${game.title}」（房间 ${game.game_id}）吗？玩家将无法继续本局；操作记录会保留。`)) return;
+      try {
+        const endpoint = game.game_type === "mahjong"
+          ? `/api/mahjong/admin/games/${encodeURIComponent(game.game_id)}`
+          : `/api/admin/games/${encodeURIComponent(game.game_id)}`;
+        await api(endpoint, {method: "DELETE"});
+        setError("");
+        await refresh();
+      } catch (error) {
+        setError(error.message);
+      }
+    }
+
+    async function refresh() {
+      if (!token) return false;
+      try {
+        const [landlordData, mahjongData] = await Promise.all([
+          api("/api/admin/games"),
+          api("/api/mahjong/admin/games")
+        ]);
+        games = [
+          ...landlordData.games.map(game => ({...game, game_type: "landlord"})),
+          ...mahjongData.games.map(game => ({...game, game_type: "mahjong"}))
+        ].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+        setError("");
+        renderGames(games);
+        return true;
+      } catch (error) {
+        setError(error.message);
+        if (error.status === 403) {
+          endLocalSession("管理会话已失效或已下线，请重新连接。");
+        }
+        return false;
+      }
+    }
+
+    $("unlock").addEventListener("click", async () => {
+      const password = $("admin-token").value;
+      if (!password) { setError("请输入管理口令。"); return; }
+      setError("");
+      try {
+        const response = await fetch("/api/admin/session", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({password})
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || `请求失败 (${response.status})`);
+        token = result.token;
+        sessionStorage.setItem("landlord-admin-token", token);
+        $("admin-token").value = "";
+        $("unlock").disabled = true;
+        if (!await refresh()) return;
+        $("dashboard").classList.remove("hidden");
+        $("auth-controls").classList.add("hidden");
+        $("logout").hidden = false;
+        $("connection-status").textContent = "管理端已连接，牌局列表每 2.5 秒自动更新。";
+        clearInterval(poll);
+        poll = setInterval(refresh, 2500);
+      } catch (error) {
+        setError(error.message);
+      } finally {
+        $("unlock").disabled = false;
+      }
+    });
+
+    $("logout").addEventListener("click", async () => {
+      try {
+        await api("/api/admin/session", {method: "DELETE"});
+        endLocalSession("管理端已下线。其他设备现在可以登录。");
+        setError("");
+      } catch (error) {
+        setError(error.message);
+        if (error.status === 403) {
+          endLocalSession("当前管理会话已失效或已下线。");
+        }
+      }
+    });
+
+    $("create").addEventListener("click", async () => {
+      try {
+        const gameType = $("game-type").value;
+        const endpoint = gameType === "mahjong"
+          ? "/api/mahjong/admin/games"
+          : "/api/admin/games";
+        const result = await api(endpoint, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            title: $("game-title").value,
+            human_count: Number($("human-count").value)
+          })
+        });
+        selectedGame = result.game.game_id;
+        $("invite").textContent = `${gameType === "mahjong" ? "湖南麻将" : "斗地主"}房间 ${selectedGame} · 邀请链接：${result.game.invite_url}`;
+        $("game-title").value = "";
+        await refresh();
+      } catch (error) { setError(error.message); }
+    });
+    $("game-type").addEventListener("change", () => {
+      const mahjong = $("game-type").value === "mahjong";
+      $("human-count").replaceChildren();
+      const counts = mahjong ? [1, 2, 3, 4] : [1, 2, 3];
+      for (const count of counts) {
+        const option = document.createElement("option");
+        option.value = String(count);
+        option.textContent = mahjong
+          ? `${count} 人真人 + ${4 - count} 个 AI`
+          : count === 3 ? "3 人真人" : `${count} 人真人 + ${3 - count} 个 AI`;
+        $("human-count").append(option);
+      }
+      $("human-count").value = String(mahjong ? 4 : 3);
+      $("game-help").textContent = mahjong
+        ? "湖南麻将每桌共 4 个座位；可选择 1–4 位真人，其余座位由 AI 补齐。创建后生成麻将专属邀请链接。"
+        : "斗地主每桌共 3 个座位；可选择 1–3 位真人，其余座位由 AI 补齐。创建后生成斗地主专属邀请链接。";
+    });
+    $("refresh").addEventListener("click", refresh);
+
+    if (token) {
+      refresh().then(connected => {
+        if (connected) {
+          $("dashboard").classList.remove("hidden");
+          $("auth-controls").classList.add("hidden");
+          $("logout").hidden = false;
+          $("connection-status").textContent = "管理端已连接，牌局列表每 2.5 秒自动更新。";
+          poll = setInterval(refresh, 2500);
+        }
+      });
+    }
+  </script>
+</body>
+</html>
